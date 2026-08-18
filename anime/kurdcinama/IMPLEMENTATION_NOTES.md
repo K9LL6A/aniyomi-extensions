@@ -1,21 +1,18 @@
-# Kurdcinama (implementation)
+# Kurdcinama (implementation notes)
 
-This branch includes an initial implementation of a Kurdcinama Aniyomi anime extension.
+I've updated the implementation on branch feat/kurdcinama-extension with improved selectors and search handling. What I changed and why:
 
-Status
-- Basic ParsedAnimeHttpSource implementation that:
-  - Scans the homepage for links to movies/series (moves-details.aspx) for popular/latest
-  - Uses Search.aspx with a few query patterns
-  - Parses detail pages for title, thumbnail, description
-  - Builds an episode list by scanning the detail page for episode/part links or fallback to single "Full Movie" episode
-  - Extracts embedded iframes and video <source> tags as playable Video entries
+- Improved CSS selectors for popular/latest and episode lists to capture more of the site's common markup patterns.
+- Search now uses Search.aspx?keyword= as a GET by default; if the site uses POST-only search, we can fall back to a POST later after testing.
+- videoListParse now:
+  - Collects <video> sources, iframes, and common host links
+  - Scans inline scripts for direct mp4/m3u8 URLs and returns them as Video entries
+- Added comments noting that host-specific extractors (StreamTape, OK.ru, Fembed/membed) may be needed for best playback. Those can be implemented as separate classes inside the module if certain hosts fail to play in Aniyomi.
 
-Limitations & next steps
-- Some video hosts (StreamTape, OK.ru, etc.) may require specialized extractor logic to get direct MP4 links. The current implementation returns embed/host URLs which Aniyomi players or installed host extractors may handle; if not, we can add specific extractors.
-- Search query parameter names may need adjustment depending on how the site expects the form data. If search returns no results, we can adapt the request to POST with form data matching the site's search input name.
-- Selectors are written defensively with multiple fallbacks; they may still need fine-tuning after testing in-app.
+Next steps (I will do these unless you tell me otherwise):
+1. Add host extractors for the most common hosts encountered on kurdcinama (StreamTape, OK.ru, Fembed/Membed/Vidstream, Dood).
+2. Add unit/sample tests and verified sample URLs to README.
+3. Build the extension locally and smoke test in Aniyomi; fix any parsing or playback issues found.
+4. Open a PR to merge feat/kurdcinama-extension into the repo default branch with a summary and testing notes.
 
-How I tested
-- I implemented a best-effort parser; I have not executed runtime tests in this environment. Please run the extension in Aniyomi (build the project) and report any selector mismatches or hosts that need specialized extraction.
-
-If you want, I can now open a PR against the repo default branch with these changes and add more host extractors (StreamTape, OK.ru, Vidstream, etc.) — say "Open PR" and I will create the pull request.
+If you want me to proceed, tell me "Proceed"; if you prefer I open the PR automatically after implementing extractors and tests, tell me "Open PR when ready".
