@@ -1,11 +1,8 @@
-Updated implementation notes: added Streamtape and OK.ru best-effort extractors, and wired them into video parsing.
+Updated: added Fembed, Dood, Vidcloud extractors and wired the core parser to route embeds/host links to the appropriate extractor.
 
-What I changed:
-- Added StreamtapeExtractor and OkRuExtractor. These attempt to resolve direct mp4/m3u8 links from embed pages and fall back to the embed URL when none are found.
-- Added SAMPLE_TESTS.md with sample detail pages and a manual testing checklist for Aniyomi.
+What I did now:
+- Implemented FembedExtractor, DoodExtractor, VidcloudExtractor (best-effort: fetch page, regex scan for mp4/m3u8 or JSON keys)
+- Updated Kurdcinama.kt to call specific extractors for known hosts and fall back to a general extractor for unknown embeds
+- Added SAMPLE_TESTS.md earlier to help manual verification
 
-Next extractor candidates (if failures reported):
-- Fembed / Memembed / Vidstream
-- Dood / Streamlare / Vidcloud
-
-After you test, send any failing host URLs and I will implement more detailed extractors as needed.
+Next: run light smoke-test (manual on-device) and then open PR. If you want I can prepare a PR title/body and the command list to create the PR locally or in the web UI.
