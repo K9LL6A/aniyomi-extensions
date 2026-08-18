@@ -4,35 +4,19 @@ import eu.kanade.tachiyomi.animeextension.extractors.ExtractorLink
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
-import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.asObservableSuccess
 import kotlinx.serialization.json.Json
-import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import rx.Observable
 import uy.kohesive.injekt.injectLazy
 
-/**
- * Kurdcinama extension implementation.
- *
- * This is a pragmatic implementation intended to work in Aniyomi. It:
- * - Parses homepage links to movie/series detail pages (moves-details.aspx)
- * - Uses Search.aspx (GET or POST fallback) to perform searches
- * - Parses detail pages for title, thumbnail, synopsis
- * - Builds episode lists by searching for episode/part links, otherwise returns a single "Full Movie" episode
- * - Collects iframe embeds and <video> sources, and returns host links as Video entries. Where possible,
- *   it attempts to follow common patterns for hosts; for complex hosts (StreamTape, ok.ru, fembed),
- *   specific extractor implementations should be added in the future.
- */
 class Kurdcinama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override val name = "KurdCinama"
     override val baseUrl = "https://www.kurdcinama.com"
@@ -75,7 +59,6 @@ class Kurdcinama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     // --- Search ---
     override fun getSearchAnimeRequest(page: Int, query: String, filters: Array<AnimeFilter>): Request {
         val q = java.net.URLEncoder.encode(query, "UTF-8")
-        // Prefer Search.aspx with 'keyword' param; if site expects a POST, we'll fallback in parse
         val url = "$baseUrl/Search.aspx?keyword=$q"
         return GET(url, defaultHeaders())
     }
@@ -107,7 +90,6 @@ class Kurdcinama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun episodeListParse(document: Document): List<SEpisode> {
         val episodes = mutableListOf<SEpisode>()
 
-        // Try common episode containers
         val epSelectors = listOf(
             "div.episodes a[href*='episode'], .episodes a",
             "a[href*='part'], a[href*='episodeid']",
@@ -135,7 +117,6 @@ class Kurdcinama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 episodes.add(ep)
             }
         } else {
-            // No explicit episodes: single movie
             val ep = SEpisode.create()
             ep.name = "Full Movie"
             ep.setUrlWithoutDomain(document.location())
@@ -159,34 +140,35 @@ class Kurdcinama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             videos.add(Video(src, quality, src))
         }
 
-        // 2) iframes
+        // 2) iframes - try to resolve
         document.select("iframe[src]").forEach { iframe ->
             val src = iframe.attr("abs:src")
-            if (src.isNotEmpty()) videos.add(Video(src, "Embed", src))
-        }
-
-        // 3) direct host links
-        document.select("a[href]").forEach { a ->
-            val href = a.attr("abs:href")
-            if (href.contains("streamtape") || href.contains("streamlare") || href.contains("ok.ru") || href.contains("fembed") || href.contains("membed") || href.contains("vidstream") || href.contains("dood")) {
-                videos.add(Video(href, a.text().ifEmpty { "Host" }, href))
+            if (src.isNotEmpty()) {
+                val resolved = KurdcinamaExtractors.extract(client, src, document.location())
+                videos.addAll(resolved)
             }
         }
 
-        // 4) Look in scripts for embedded sources (common pattern)
+        // 3) direct host links - try to resolve
+        document.select("a[href]").forEach { a ->
+            val href = a.attr("abs:href")
+            if (href.contains("streamtape") || href.contains("streamlare") || href.contains("ok.ru") || href.contains("fembed") || href.contains("membed") || href.contains("vidstream") || href.contains("dood")) {
+                val resolved = KurdcinamaExtractors.extract(client, href, document.location())
+                videos.addAll(resolved)
+            }
+        }
+
+        // 4) look in scripts for direct media urls
         val scripts = document.select("script").map { it.data() }.joinToString("\n")
-        // Regex for direct file urls
-        val urlRegex = Regex("(https?:\\/\\/[\\w\\-.\\/~:\\?=&%]+\\.(mp4|m3u8)(\\?[^\"]*)?)")
+        val urlRegex = Regex("(https?://[^\"'\\s<>]+?\\.(?:mp4|m3u8)(?:\\?[^\"'\\s<>]*)?)")
         urlRegex.findAll(scripts).forEach { m ->
             val url = m.groupValues[1]
             videos.add(Video(url, "Video", url))
         }
 
-        // Deduplicate
         return videos.distinctBy { it.url }
     }
 
-    // --- Required stubs ---
     override fun getFilterList() = AnimeFilterList()
     override fun animeDetailsSelector() = ""
     override fun episodeListSelector() = ""
